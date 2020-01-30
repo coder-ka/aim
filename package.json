@@ -1,0 +1,25 @@
+{
+  "name": "@coder-ka/aim",
+  "version": "0.0.1",
+  "description": "A View-Model-Update library written in ReasonML",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://"
+  },
+  "scripts": {
+    "build": "bsb -make-world",
+    "clean": "bsb -clean-world",
+    "test": "bsb -make-world && jest"
+  },
+  "keywords": [],
+  "author": "coder-ka",
+  "license": "MIT",
+  "devDependencies": {
+    "@glennsl/bs-jest": "^0.4.9",
+    "bs-platform": "^7.0.1"
+  },
+  "dependencies": {
+    "bs-webapi": "^0.15.6"
+  }
+}
