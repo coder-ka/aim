@@ -1,18 +1,26 @@
 {
   "name": "@coder-ka/aim",
-  "version": "0.0.1",
+  "version": "0.0.6",
   "description": "A View-Model-Update library written in ReasonML",
-  "main": "index.js",
+  "main": "lib/js/src/aim.js",
   "repository": {
     "type": "git",
-    "url": "https://"
+    "url": "https://github.com/coder-ka/aim"
   },
   "scripts": {
     "build": "bsb -make-world",
     "clean": "bsb -clean-world",
     "test": "bsb -make-world && jest"
   },
-  "keywords": [],
+  "files": [
+    "/src",
+    "/lib/js/src",
+    "bsconfig.json"
+  ],
+  "keywords": [
+    "reason",
+    "bucklescript"
+  ],
   "author": "coder-ka",
   "license": "MIT",
   "devDependencies": {

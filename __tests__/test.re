@@ -2,21 +2,21 @@ open Jest;
 open Webapi.Dom;
 
 module ChildComponent = {
-  let start = (container, defaultState) => {
+  let createElement = (~el, ~defaultState, ~children, ()) => {
     open Aim;
 
     let span = html("span");
 
-    define(span([text_(state => state)]), container);
+    define(span([text_(state => state)]), el);
 
-    update(defaultState, container);
+    update(defaultState, el);
   };
 };
 
 module Counter = {
   let increment = count => count + 1;
 
-  let start = (container, style) => {
+  let createElement = (~el, ~children, ()) => {
     open Aim;
 
     let div = html("div");
@@ -31,13 +31,12 @@ module Counter = {
         ]),
         button([
           attr("id", "inc"),
-          style,
           event_("click", (_, count) =>
-            update(increment(count), container)
+            update(increment(count), el)
           ),
           text("+"),
           slot_((el, count) =>
-            ChildComponent.start(el, Js.Int.toString(count))
+            <ChildComponent el={el} defaultState={Js.Int.toString(count)} />
           ),
         ]),
         nodes_(
@@ -55,10 +54,10 @@ module Counter = {
             ]),
         ),
       ]),
-      container,
+      el,
     );
 
-    update(0, container);
+    update(0, el);
   };
 };
 
@@ -86,7 +85,7 @@ describe("Expect", () => {
           raise(RootElement_NotFound);
         };
 
-      Counter.start(container, Aim.attr("class", "bg-primary-500"));
+      <Counter el={container}/>
 
       // click +
       let incButton = container |> Element.querySelector("button#inc");

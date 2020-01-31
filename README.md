@@ -18,7 +18,7 @@ open Webapi.Dom;
 module Counter = {
   let increment = count => count + 1;
 
-  let start = (defaultState, container) => {
+  let createElement = (~el, ~defaultState, ~children, ()) => {
     open Aim;
 
     let div = html("div");
@@ -32,22 +32,22 @@ module Counter = {
         ]),
         button([
           event_("click", (_, count) =>
-            update(increment(count), container)
+            update(increment(count), el)
           ),
           text("+")
         ]),
       ]),
-      container,
+      el,
     );
 
-    update(defaultState, container);
+    update(defaultState, el);
   };
 };
 
-let container = Document.querySelector("body", document);
+let el = Document.querySelector("body", document);
 
-// start counter app in <body>
-Counter.start(0, container);
+// render counter app in <body>
+Counter.createElement(~el=el, ~defaultState=0, ~children=[], ());
 ```
 
 簡単にロジックと UI をカプセル化し、`Counter.increment` というロジックのみを単体テストすることもできます。
@@ -202,7 +202,7 @@ button([
 
 ```reasonml
 module Another {
-  let start = el => {
+  let createElement = (~el, ~children, ()) => {
     define(...)
     update(...)
   }
@@ -211,13 +211,14 @@ module Another {
 let div = html("div");
 
 div([
-  slot(el => Another.start(el))
+  // インターフェースを揃えれば、JSXも使えます
+  slot(el => <Another el={el}/>)
 ])
 
 div([
   // 状態に対して動的です。
   // これによりAnotherコンポーネントの`define`が２回呼ばれますが、キャッシュによりパスされる結果、`update`による初期化のみが実行されます。
-  slot_((el, state) => Another.start(el))
+  slot_((el, state) => <Another el={el}/>)
 ])
 ```
 
