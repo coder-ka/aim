@@ -5,9 +5,9 @@ module ChildComponent = {
   let createElement = (~el, ~defaultState, ~children, ()) => {
     open Aim;
 
-    let span = html("span");
+    let span = (~children, ()) => html("span", children);
 
-    define(span([text_(state => state)]), el);
+    define(<span> {text_(state => state)} </span>, el);
 
     update(defaultState, el);
   };
@@ -19,41 +19,42 @@ module Counter = {
   let createElement = (~el, ~children, ()) => {
     open Aim;
 
-    let div = html("div");
-    let button = html("button");
-    let span = html("span");
+    let div = (~children, ()) => html("div", children);
+    let button = (~children, ()) => html("button", children);
+    let span = (~children, ()) => html("span", children);
+
+    let id = attr("id");
+    let onClick_ = event_("click");
 
     define(
-      div([
-        span([
-          attr("id", "display"),
-          text_(count => Js.Int.toString(count)),
-        ]),
-        button([
-          attr("id", "inc"),
-          event_("click", (_, count) =>
-            update(increment(count), el)
-          ),
-          text("+"),
-          slot_((el, count) =>
-            <ChildComponent el={el} defaultState={Js.Int.toString(count)} />
-          ),
-        ]),
-        nodes_(
-          count =>
-            [1, 2, 3, 4, 5, 6]
-            |> List.filter(x => x > count)
-            |> List.sort((cur, next) =>
-                 count mod 2 === 0 ? cur - next : next - cur
-               ),
-          (num, _) => Js.Int.toString(num),
-          (num, _) =>
-            span([
-              attr("count", Js.Int.toString(num)),
-              text_(count => Js.Int.toString((count + 1) * num)),
-            ]),
-        ),
-      ]),
+      <div>
+        <span>
+          {id("display")}
+          {text_(count => Js.Int.toString(count))}
+        </span>
+        <button>
+          {id("inc")}
+          {onClick_((_, count) => update(increment(count), el))}
+          {text("+")}
+          {slot_((el, count) =>
+             <ChildComponent el defaultState={Js.Int.toString(count)} />
+           )}
+        </button>
+        {nodes_(
+           count =>
+             [1, 2, 3, 4, 5, 6]
+             |> List.filter(x => x > count)
+             |> List.sort((cur, next) =>
+                  count mod 2 === 0 ? cur - next : next - cur
+                ),
+           (num, _) => Js.Int.toString(num),
+           (num, _) =>
+             <span>
+               {attr("count", Js.Int.toString(num))}
+               {text_(count => Js.Int.toString((count + 1) * num))}
+             </span>,
+         )}
+      </div>,
       el,
     );
 
@@ -85,7 +86,7 @@ describe("Expect", () => {
           raise(RootElement_NotFound);
         };
 
-      <Counter el={container}/>
+      <Counter el=container />;
 
       // click +
       let incButton = container |> Element.querySelector("button#inc");

@@ -1,6 +1,6 @@
 {
   "name": "@coder-ka/aim",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A View-Model-Update library written in ReasonML",
   "main": "lib/js/src/aim.js",
   "repository": {
@@ -8,7 +8,8 @@
     "url": "https://github.com/coder-ka/aim"
   },
   "scripts": {
-    "build": "bsb -make-world",
+    "prepublish": "npm run build",
+    "build": "bsb -make-world -clean-world",
     "clean": "bsb -clean-world",
     "test": "bsb -make-world && jest"
   },
