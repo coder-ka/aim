@@ -1,64 +1,35 @@
 open Jest;
 open Webapi.Dom;
 
-module ChildComponent = {
-  let createElement = (~el, ~defaultState, ~children, ()) => {
-    open Aim;
-
-    let span = (~children, ()) => html("span", children);
-
-    define(<span> {text_(state => state)} </span>, el);
-
-    update(defaultState, el);
-  };
-};
-
 module Counter = {
   let increment = count => count + 1;
 
-  let createElement = (~el, ~children, ()) => {
+  let createElement = (~children, ()) => {
     open Aim;
 
-    let div = (~children, ()) => html("div", children);
-    let button = (~children, ()) => html("button", children);
-    let span = (~children, ()) => html("span", children);
+    let div = h("div");
 
-    let id = attr("id");
-    let onClick_ = event_("click");
+    let button = (~id, ~onClick=_ => (), ~children, ()) =>
+      h(
+        "button",
+        ~attrs=[attr("id", id), event("click", onClick)],
+        ~children,
+        (),
+      );
 
-    define(
-      <div>
-        <span>
-          {id("display")}
-          {text_(count => Js.Int.toString(count))}
-        </span>
-        <button>
-          {id("inc")}
-          {onClick_((_, count) => update(increment(count), el))}
-          {text("+")}
-          {slot_((el, count) =>
-             <ChildComponent el defaultState={Js.Int.toString(count)} />
-           )}
-        </button>
-        {nodes_(
-           count =>
-             [1, 2, 3, 4, 5, 6]
-             |> List.filter(x => x > count)
-             |> List.sort((cur, next) =>
-                  count mod 2 === 0 ? cur - next : next - cur
-                ),
-           (num, _) => Js.Int.toString(num),
-           (num, _) =>
-             <span>
-               {attr("count", Js.Int.toString(num))}
-               {text_(count => Js.Int.toString((count + 1) * num))}
-             </span>,
-         )}
-      </div>,
-      el,
+    let span = (~id, ~children, ()) =>
+      h("span", ~attrs=[attr("id", id)], ~children, ());
+
+    component(
+      (state, update) =>
+        <div>
+          <span id="display"> {text(Js.Int.toString(state))} </span>
+          <button id="inc" onClick={_ => update(increment(state))}>
+            {text("+")}
+          </button>
+        </div>,
+      0,
     );
-
-    update(0, el);
   };
 };
 
@@ -86,7 +57,7 @@ describe("Expect", () => {
           raise(RootElement_NotFound);
         };
 
-      <Counter el=container />;
+      Aim.render(<Counter />, container);
 
       // click +
       let incButton = container |> Element.querySelector("button#inc");

@@ -1,6 +1,6 @@
 {
   "name": "@coder-ka/aim",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "A View-Model-Update library written in ReasonML",
   "main": "lib/js/src/aim.js",
   "repository": {
@@ -10,6 +10,7 @@
   "scripts": {
     "prepublish": "npm run build",
     "build": "bsb -make-world -clean-world",
+    "watch": "bsb -make-world -clean-world -w",
     "clean": "bsb -clean-world",
     "test": "bsb -make-world && jest"
   },
@@ -26,9 +27,10 @@
   "license": "MIT",
   "devDependencies": {
     "@glennsl/bs-jest": "^0.4.9",
-    "bs-platform": "^7.0.1"
+    "bs-platform": "^7.0.1",
+    "bs-webapi": "^0.15.6"
   },
   "dependencies": {
-    "bs-webapi": "^0.15.6"
+    "superfine": "^7.0.0"
   }
 }
