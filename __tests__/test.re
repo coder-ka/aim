@@ -16,10 +16,10 @@ module ChildComponent = {
 
 let generateArray = () => {
   let arr =
-    Array.make(10000, 0) |> Array.map(_ => Js.Math.random_int(0, 999));
+    Array.make(100000, 0) |> Array.map(_ => Js.Math.random_int(0, 999));
   arr;
 };
-let sampled = Array.to_list(generateArray());
+let sampled = generateArray();
 
 module Counter = {
   let increment = count => count + 1;
@@ -69,12 +69,16 @@ module Counter = {
               </div>
             </button>
             {nodes_(
-               count =>
-                 sampled
-                 |> List.filter(x => x > count)
-                 |> List.sort((cur, next) =>
+               count => {
+                 let filtered = sampled |> Js.Array.filter(x => x > count);
+
+                 filtered
+                 |> Array.sort((cur, next) =>
                       count mod 2 === 0 ? cur - next : next - cur
-                    ),
+                    );
+
+                 filtered;
+               },
                (num, i) => Js.Int.toString(i),
                (num, _) =>
                  <span id={Js.Int.toString(num)}>

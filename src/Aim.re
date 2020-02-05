@@ -47,12 +47,12 @@ module DynamicPart = {
       })
     | DynamicNodesPart({
         el: Dom.element,
-        iterator: 'state => list('item),
+        iterator: 'state => array('item),
         keyFn: ('item, int) => string,
         dynamicsFn: ('item, int) => dynamicParts('state, 'item),
         start: Dom.comment,
         ending: Dom.comment,
-        current: option(list(dynamicNodesPartItem('state, 'item))),
+        current: option(array(dynamicNodesPartItem('state, 'item))),
       })
     | DynamicSlotPart({
         el: Dom.element,
@@ -118,9 +118,9 @@ module DynamicPart = {
           | Some(current) =>
             let newList =
               iterable
-              |> List.mapi((i, x) => {
+              |> Array.mapi((i, x) => {
                    let key = keyFn(x, i);
-                   let item = current |> List.find_opt(x => x.key === key);
+                   let item = current |> Js.Array.find(x => x.key === key);
 
                    switch (item) {
                    | Some(item) =>
@@ -150,7 +150,8 @@ module DynamicPart = {
                  });
 
             // remove unneccesary nodes
-            let firstItem = List.nth_opt(newList, 0);
+            let firstItem =
+              Array.length(newList) > 0 ? Some(newList[0]) : None;
 
             switch (firstItem) {
             | Some(firstItem) =>
@@ -179,7 +180,7 @@ module DynamicPart = {
             newList;
           | None =>
             iterable
-            |> List.mapi((i, x) => {
+            |> Array.mapi((i, x) => {
                  let parts = dynamicsFn(x, i);
 
                  List.map(updateDynamic(el, state, isSvg), parts.dynamics);
@@ -387,7 +388,7 @@ module Node = {
   and dynamicNode('state, 'item) =
     | DynamicTextNode('state => string)
     | DynamicNodes(
-        'state => list('item),
+        'state => array('item),
         ('item, int) => string,
         ('item, int) => node('state, 'item),
       )
