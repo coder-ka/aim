@@ -14,6 +14,13 @@ module ChildComponent = {
   };
 };
 
+let generateArray = () => {
+  let arr =
+    Array.make(10000, 0) |> Array.map(_ => Js.Math.random_int(0, 999));
+  arr;
+};
+let sampled = Array.to_list(generateArray());
+
 module Counter = {
   let increment = count => count + 1;
 
@@ -27,7 +34,7 @@ module Counter = {
         [attr("id", id), event_("click", onClick_)],
         children,
       );
-    let span = (~id="", ~children, ()) =>
+    let span = (~id, ~children, ()) =>
       html("span", [attr("id", id)], children);
 
     component(
@@ -40,20 +47,37 @@ module Counter = {
             <button
               id="inc" onClick_={(state, _) => update(increment(state))}>
               {text("+")}
-              {slot_(count =>
-                 <ChildComponent defaultState={Js.Int.toString(count)} />
-               )}
+              <div>
+                {slot_(count =>
+                   <ChildComponent defaultState={Js.Int.toString(count)} />
+                 )}
+              </div>
+              <div>
+                {slot_(count =>
+                   <ChildComponent defaultState={Js.Int.toString(count)} />
+                 )}
+              </div>
+              <div>
+                {slot_(count =>
+                   <ChildComponent defaultState={Js.Int.toString(count)} />
+                 )}
+              </div>
+              <div>
+                {slot_(count =>
+                   <ChildComponent defaultState={Js.Int.toString(count)} />
+                 )}
+              </div>
             </button>
             {nodes_(
                count =>
-                 [1, 2, 3, 4, 5, 6]
+                 sampled
                  |> List.filter(x => x > count)
                  |> List.sort((cur, next) =>
                       count mod 2 === 0 ? cur - next : next - cur
                     ),
-               (num, _) => Js.Int.toString(num),
+               (num, i) => Js.Int.toString(i),
                (num, _) =>
-                 <span>
+                 <span id={Js.Int.toString(num)}>
                    {text_(count => Js.Int.toString((count + 1) * num))}
                  </span>,
              )}

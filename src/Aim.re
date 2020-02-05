@@ -163,12 +163,9 @@ module DynamicPart = {
                   | Some(pre) =>
                     if (pre !== (start |> Comment.asNode)) {
                       parent |> Element.removeChild(pre);
-                      Js.log("removed");
-
                       remove(firstItem |> Webapi.Dom.Node.previousSibling);
                     }
 
-                  // "ここを通っているらしい = endingの位置がおかしい？たしかに最後の出力でも最後に１が来ているからおかしい！",
                   | None => ()
                   };
                 };
@@ -203,7 +200,7 @@ module DynamicPart = {
       | DynamicSlotPart({el, func, ending}) =>
         let component = func(state);
 
-        component((), el, isSvg, Some(ending), ());
+        component((), el, isSvg, ~marker=Some(ending), ());
         DynamicSlotPart({el, func, ending});
       | DynamicStringAttributePart({el, name, func, current}) =>
         let value = func(state);
@@ -436,9 +433,12 @@ module Node = {
     | DynamicNode(node) =>
       switch (node) {
       | DynamicTextNode(func) =>
-        let text = Document.createTextNode("", document);
-
-        container |> Element.insertBefore(text, ending);
+        let text =
+          container
+          |> Element.insertBefore(
+               Document.createTextNode("", document),
+               ending,
+             );
 
         {
           target: Some(text |> Text.asNode),
@@ -476,15 +476,21 @@ module Node = {
     | StaticNode(node) =>
       switch (node) {
       | StaticTextNode(content) =>
-        let text = document |> Document.createTextNode(content);
+        let text =
+          container
+          |> Element.insertBefore(
+               document |> Document.createTextNode(content),
+               ending,
+             );
 
-        container |> Element.insertBefore(text, ending);
-
-        {target: None, dynamics: []};
+        {target: Some(text |> Text.asNode), dynamics: []};
       | StaticElement(name, attrs, nodes, isSvg) =>
-        let el = HtmlOrSvg.createElement(name, isSvg);
-
-        container |> Element.insertBefore(el, ending);
+        let el =
+          container
+          |> Element.insertBefore(
+               HtmlOrSvg.createElement(name, isSvg),
+               ending,
+             );
 
         let marker = createMarker();
         el |> Element.appendChild(marker);
@@ -505,7 +511,7 @@ module Node = {
       | StaticSlot(func) =>
         let component = func(container);
 
-        component((), container, isSvg, Some(ending), ());
+        component((), container, isSvg, ~marker=Some(ending), ());
 
         {target: None, dynamics: []};
       }
@@ -573,11 +579,7 @@ let component =
       ~marker: option(Dom.comment),
       (),
     ) => {
-  let dipatch = state => {
-    Template.update(state, el, isSvg);
-
-    Js.log(el |> Webapi.Dom.Element.outerHTML);
-  };
+  let dipatch = state => Template.update(state, el, isSvg);
 
   Template.define(factory(dipatch), el, isSvg, ~marker, ());
 
@@ -607,6 +609,10 @@ let attr = (name, value) =>
   StaticAttribute(StaticStringAttribute(name, value));
 let attr_ = (name, func) =>
   DynamicAttribute(DynamicStringAttribute(name, func));
+let boolAttr = (name, value) =>
+  StaticAttribute(StaticBooleanAttribute(name, value));
+let boolAttr_ = (name, func) =>
+  DynamicAttribute(DynamicBooleanAttribute(name, func));
 let event = (name, handler) => StaticAttribute(StaticEvent(name, handler));
 let event_ = (name, func) => DynamicAttribute(DynamicEvent(name, func));
 let eventWithOptions = (name, handler, eventOption) =>
