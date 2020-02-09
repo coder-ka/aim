@@ -1,15 +1,66 @@
 open Jest;
 open Webapi.Dom;
 
+module Elements = {
+  open Aim;
+
+  let div = (~children, ()) => html("div", [], children);
+  let button = (~id, ~onClick, ~children, ()) =>
+    html("button", [attr("id", id), event("click", onClick)], children);
+
+  let span = (~id="", ~children, ()) =>
+    html("span", [attr("id", id)], children);
+};
+
+module CountStore = {
+  type t = int;
+
+  let current = ref(0);
+  let hooks = ref([]);
+  let observe = hook => {
+    hooks := [hook, ...hooks^];
+  };
+
+  type mutations =
+    | Increment(int);
+
+  type status =
+    | Completed(int);
+
+  let mutate = (mutation, callback) => {
+    switch (mutation) {
+    | Increment(count) =>
+      let count = count + 1;
+
+      callback(Completed(count));
+
+      current := count;
+      hooks^ |> List.iter(hook => hook(count));
+    };
+  };
+};
+
 module ChildComponent = {
-  let createElement = (~defaultState, ~children, ()) => {
-    open Aim;
+  open Aim;
+  open Elements;
 
-    let span = (~children, ()) => html("span", [], children);
+  type mutation =
+    | ApplyIncrement(int);
 
+  let createElement = (~children, ()) => {
     component(
-      _ => <> <span> {text_(state => state)} </span> </>,
-      defaultState,
+      <> <span> {text("hoge")} </span> </>,
+      0,
+      (update, mutation, _) => {
+        switch (mutation) {
+        | ApplyIncrement(count) => update(count)
+        };
+        ();
+      },
+      dispatch => {
+        CountStore.observe(count => {dispatch(ApplyIncrement(count))});
+        ();
+      },
     );
   };
 };
@@ -21,56 +72,55 @@ let generateArray = () => {
 let sampled = generateArray();
 
 module Counter = {
+  open Aim;
+  open Elements;
+
   let increment = count => count + 1;
 
+  type mutations =
+    | Increment;
+
   let createElement = (~children, ()) => {
-    open Aim;
-
-    let div = (~children, ()) => html("div", [], children);
-    let button = (~id, ~onClick_, ~children, ()) =>
-      html(
-        "button",
-        [attr("id", id), event_("click", onClick_)],
-        children,
-      );
-
-    let span = (~id, ~children, ()) =>
-      html("span", [attr("id", id)], children);
-
-    let children = children |> List.map(slot_);
+    let children = children |> List.map(slot);
 
     component(
-      update =>
-        <>
-          <div>
-            <span id="display">
-              {text_(count => Js.Int.toString(count))}
-            </span>
-            <button
-              id="inc" onClick_={(state, _) => update(increment(state))}>
-              {text("+")}
-            </button>
-            <div> ...children </div>
-            {nodes_(
-               count => {
-                 let filtered = sampled |> Js.Array.filter(x => x > count);
-
-                 filtered
-                 |> Array.sort((cur, next) =>
-                      count mod 2 === 0 ? cur - next : next - cur
-                    );
-
-                 filtered;
-               },
-               (_, i) => Js.Int.toString(i),
-               (num, _) =>
-                 <span id={Js.Int.toString(num)}>
-                   {text_(count => Js.Int.toString((count + 1) * num))}
-                 </span>,
-             )}
-          </div>
-        </>,
+      <>
+        <div>
+          <span id="display"> {text_(count => Js.Int.toString(count))} </span>
+          <button id="inc" onClick={(_, dispatch) => dispatch(Increment)}>
+            {text("+")}
+          </button>
+          <div> ...children </div>
+        </div>
+        {nodes_(
+           count => {
+             let filtered =
+               [|1, 2, 3, 4, 5|] |> Js.Array.filter(x => x > count);
+             filtered
+             |> Array.sort((cur, next) =>
+                  count mod 2 === 0 ? cur - next : next - cur
+                );
+             filtered;
+           },
+           (_, i) => Js.Int.toString(i),
+           (num, _) =>
+             <span id={Js.Int.toString(num)}>
+               {text_(count => Js.Int.toString((count + 1) * num))}
+             </span>,
+         )}
+      </>,
       0,
+      (update, mutation, count) => {
+        switch (mutation) {
+        | Increment =>
+          CountStore.mutate(CountStore.Increment(count), status => {
+            switch (status) {
+            | CountStore.Completed(count) => update(count)
+            }
+          })
+        }
+      },
+      dispatch => {()},
     );
   };
 };
@@ -99,12 +149,7 @@ describe("Expect", () => {
           raise(RootElement_NotFound);
         };
 
-      Aim.render(
-        <Counter>
-          {count => <ChildComponent defaultState={Js.Int.toString(count)} />}
-        </Counter>,
-        container,
-      );
+      Aim.render(<Counter> <ChildComponent /> </Counter>, container);
 
       // click +
       let incButton = container |> Element.querySelector("button#inc");

@@ -7,7 +7,7 @@ type eventOption = {
   passive: bool,
 };
 
-module HtmlOrSvg = {
+module ElementOperation = {
   open Webapi.Dom;
 
   let svgNamespace = "http://www.w3.org/2000/svg";
@@ -31,12 +31,12 @@ module HtmlOrSvg = {
 };
 
 module DynamicPart = {
-  type dynamicNodesPartItem('state, 'item) = {
+  type keyedDynamicPart('state, 'item) = {
     key: string,
     parts: dynamicParts('state, 'item),
   }
   and dynamicParts('state, 'item) = {
-    target: option(Dom.node),
+    node: option(Dom.node),
     dynamics: list(dynamicPart('state, 'item)),
   }
   and dynamicPart('state, 'item) =
@@ -52,12 +52,7 @@ module DynamicPart = {
         dynamicsFn: ('item, int) => dynamicParts('state, 'item),
         start: Dom.comment,
         ending: Dom.comment,
-        current: option(array(dynamicNodesPartItem('state, 'item))),
-      })
-    | DynamicSlotPart({
-        el: Dom.element,
-        func: 'state => component,
-        ending: Dom.comment,
+        current: option(array(keyedDynamicPart('state, 'item))),
       })
     | DynamicStringAttributePart({
         el: Dom.element,
@@ -70,17 +65,6 @@ module DynamicPart = {
         name: string,
         func: 'state => bool,
         current: option(bool),
-      })
-    | DynamicEventPart({
-        el: Dom.element,
-        name: string,
-        func: ('state, Dom.event) => unit,
-      })
-    | DynamicEventWithOptionsPart({
-        el: Dom.element,
-        name: string,
-        func: ('state, Dom.event) => unit,
-        eventOption,
       });
 
   let rec updateDynamic =
@@ -124,28 +108,34 @@ module DynamicPart = {
 
                    switch (item) {
                    | Some(item) =>
-                     switch (item.parts.target) {
-                     | Some(target) =>
-                       parent |> Element.insertBefore(target, ending);
-                       ();
-                     | None => () // slot child
-                     };
+                     let {parts} = item;
 
-                     List.map(
-                       updateDynamic(root, state, isSvg),
-                       item.parts.dynamics,
-                     );
+                     switch (parts.node) {
+                     | Some(node) =>
+                       parent |> Element.insertBefore(node, ending);
+
+                       List.map(
+                         updateDynamic(root, state, isSvg),
+                         parts.dynamics,
+                       );
+
+                       ();
+                     | None => ()
+                     };
 
                      item;
                    | None =>
-                     let parts = dynamicsFn(x, i);
+                     let {node, dynamics} = dynamicsFn(x, i);
 
-                     List.map(
-                       updateDynamic(root, state, isSvg),
-                       parts.dynamics,
-                     );
+                     List.map(updateDynamic(root, state, isSvg), dynamics);
 
-                     {key, parts};
+                     {
+                       key,
+                       parts: {
+                         node,
+                         dynamics,
+                       },
+                     };
                    };
                  });
 
@@ -154,26 +144,24 @@ module DynamicPart = {
               Array.length(newList) > 0 ? Some(newList[0]) : None;
 
             switch (firstItem) {
-            | Some(firstItem) =>
-              let firstItem = firstItem.parts.target;
-
-              switch (firstItem) {
-              | Some(firstItem) =>
+            | Some({parts}) =>
+              switch (parts.node) {
+              | Some(node) =>
                 let rec remove = pre => {
                   switch (pre) {
                   | Some(pre) =>
                     if (pre !== (start |> Comment.asNode)) {
                       parent |> Element.removeChild(pre);
-                      remove(firstItem |> Webapi.Dom.Node.previousSibling);
+                      remove(node |> Webapi.Dom.Node.previousSibling);
                     }
 
                   | None => ()
                   };
                 };
 
-                remove(firstItem |> Webapi.Dom.Node.previousSibling);
-              | None => () // slot child
-              };
+                remove(node |> Webapi.Dom.Node.previousSibling);
+              | None => ()
+              }
             | None => ()
             };
 
@@ -181,11 +169,17 @@ module DynamicPart = {
           | None =>
             iterable
             |> Array.mapi((i, x) => {
-                 let parts = dynamicsFn(x, i);
+                 let {node, dynamics} = dynamicsFn(x, i);
 
-                 List.map(updateDynamic(el, state, isSvg), parts.dynamics);
+                 List.map(updateDynamic(el, state, isSvg), dynamics);
 
-                 {key: keyFn(x, i), parts};
+                 {
+                   key: keyFn(x, i),
+                   parts: {
+                     node,
+                     dynamics,
+                   },
+                 };
                })
           };
 
@@ -198,19 +192,14 @@ module DynamicPart = {
           ending,
           current: Some(current),
         });
-      | DynamicSlotPart({el, func, ending}) =>
-        let component = func(state);
-
-        component((), el, isSvg, ~marker=Some(ending), ());
-        DynamicSlotPart({el, func, ending});
       | DynamicStringAttributePart({el, name, func, current}) =>
         let value = func(state);
         switch (current) {
         | Some(current) =>
           if (value !== current) {
-            HtmlOrSvg.setAttribute(el, name, value, isSvg);
+            ElementOperation.setAttribute(el, name, value, isSvg);
           }
-        | None => HtmlOrSvg.setAttribute(el, name, value, isSvg)
+        | None => ElementOperation.setAttribute(el, name, value, isSvg)
         };
 
         DynamicStringAttributePart({el, name, func, current: Some(value)});
@@ -219,9 +208,9 @@ module DynamicPart = {
 
         let set = (el, name, value) =>
           if (value) {
-            HtmlOrSvg.setAttribute(el, name, name, isSvg);
+            ElementOperation.setAttribute(el, name, name, isSvg);
           } else {
-            HtmlOrSvg.removeAttribute(el, name, isSvg);
+            ElementOperation.removeAttribute(el, name, isSvg);
           };
 
         switch (current) {
@@ -233,75 +222,39 @@ module DynamicPart = {
         };
 
         DynamicBooleanAttributePart({el, name, func, current: Some(value)});
-      | DynamicEventPart({el, name, func}) =>
-        DynamicEventPart({el, name, func})
-      | DynamicEventWithOptionsPart({el, name, func, eventOption}) =>
-        DynamicEventWithOptionsPart({el, name, func, eventOption})
       }
     );
   };
 };
 
-module CurrentStateCache = {
-  type t;
-
-  [@bs.new] external create: unit => t = "WeakMap";
-  [@bs.send] external get: (t, Dom.element) => option('state) = "get";
-  // [@bs.send] external has: (t, element) => bool = "has";
-  // [@bs.send] external delete: (t, element) => unit = "delete";
-  [@bs.send] external set: (t, Dom.element, 'state) => unit = "set";
-};
-
-let currentStateCache = CurrentStateCache.create();
-
-type template('state, 'item) =
-  list(DynamicPart.dynamicParts('state, 'item));
-
-module TemplateCache = {
-  type t;
-
-  [@bs.new] external create: unit => t = "WeakMap";
-  [@bs.send]
-  external get: (t, Dom.element) => option(template('state, 'item)) = "get";
-  // [@bs.send] external has: (t, Dom.element) => bool = "has";
-  // [@bs.send] external delete: (t, Dom.element) => unit = "delete";
-  [@bs.send]
-  external set: (t, Dom.element, template('state, 'item)) => unit = "set";
-};
-
-let templateCache = TemplateCache.create();
-
 module Attribute = {
-  type attribute('state) =
+  type attribute('state, 'mutation) =
     | DynamicAttribute(dynamicAttribute('state))
-    | StaticAttribute(staticAttribute)
+    | StaticAttribute(staticAttribute('mutation))
   and dynamicAttribute('state) =
     | DynamicStringAttribute(string, 'state => string)
     | DynamicBooleanAttribute(string, 'state => bool)
-    | DynamicEvent(string, ('state, Dom.event) => unit)
-    | DynamicEventWithOptions(
-        string,
-        ('state, Dom.event) => unit,
-        eventOption,
-      )
-  and staticAttribute =
+  and staticAttribute('mutation) =
     | StaticStringAttribute(string, string)
     | StaticBooleanAttribute(string, bool)
-    | StaticEvent(string, Dom.event => unit)
-    | StaticEventWithOptions(string, Dom.event => unit, eventOption);
+    | StaticEvent(string, (Dom.event, 'mutation => unit) => unit)
+    | StaticEventWithOptions(
+        string,
+        (Dom.event, 'mutation => unit) => unit,
+        eventOption,
+      );
 
   open DynamicPart;
 
   let setAttribute =
       (
-        root: Dom.element,
-        attributes: list(attribute('state)),
         el: Dom.element,
         isSvg: bool,
+        attributes: list(attribute('state, 'mutation)),
+        dispatch: 'mutation => unit,
       )
       : dynamicParts('state, 'item) => {
     open Webapi.Dom;
-
     let dynamics =
       attributes
       |> List.map(attribute =>
@@ -314,55 +267,28 @@ module Attribute = {
              | DynamicBooleanAttribute(name, func) => [
                  DynamicBooleanAttributePart({el, name, func, current: None}),
                ]
-             | DynamicEvent(name, func) =>
-               el
-               |> Element.addEventListener(name, e =>
-                    switch (CurrentStateCache.get(currentStateCache, root)) {
-                    | Some(state) => func(state, e)
-                    | None => ()
-                    }
-                  );
-
-               [DynamicEventPart({el, name, func})];
-             | DynamicEventWithOptions(name, func, eventOption) =>
-               el
-               |> Element.addEventListenerWithOptions(
-                    name,
-                    e => {
-                      switch (CurrentStateCache.get(currentStateCache, root)) {
-                      | Some(state) => func(state, e)
-                      | None => ()
-                      }
-                    },
-                    {
-                      "capture": eventOption.capture,
-                      "once": eventOption.once,
-                      "passive": eventOption.passive,
-                    },
-                  );
-               [DynamicEventWithOptionsPart({el, name, func, eventOption})];
              }
            | StaticAttribute(attribute) =>
              switch (attribute) {
              | StaticStringAttribute(name, value) =>
-               HtmlOrSvg.setAttribute(el, name, value, isSvg);
+               ElementOperation.setAttribute(el, name, value, isSvg);
                [];
              | StaticBooleanAttribute(name, value) =>
                if (value) {
-                 HtmlOrSvg.setAttribute(el, name, name, isSvg);
+                 ElementOperation.setAttribute(el, name, name, isSvg);
                } else {
-                 HtmlOrSvg.removeAttribute(el, name, isSvg);
+                 ElementOperation.removeAttribute(el, name, isSvg);
                };
                [];
              | StaticEvent(name, handler) =>
-               el |> Element.addEventListener(name, handler);
+               el |> Element.addEventListener(name, e => handler(e, dispatch));
 
                [];
              | StaticEventWithOptions(name, handler, eventOption) =>
                el
                |> Element.addEventListenerWithOptions(
                     name,
-                    handler,
+                    e => handler(e, dispatch),
                     {
                       "capture": eventOption.capture,
                       "once": eventOption.once,
@@ -375,33 +301,32 @@ module Attribute = {
          )
       |> List.flatten;
 
-    {target: Some(el |> Element.asNode), dynamics};
+    {node: Some(el |> Element.asNode), dynamics};
   };
 };
 
 module Node = {
   open Attribute;
 
-  type node('state, 'item) =
-    | DynamicNode(dynamicNode('state, 'item))
-    | StaticNode(staticNode('state, 'item))
-  and dynamicNode('state, 'item) =
+  type node('state, 'item, 'mutation) =
+    | DynamicNode(dynamicNode('state, 'item, 'mutation))
+    | StaticNode(staticNode('state, 'item, 'mutation))
+  and dynamicNode('state, 'item, 'mutation) =
     | DynamicTextNode('state => string)
     | DynamicNodes(
         'state => array('item),
         ('item, int) => string,
-        ('item, int) => node('state, 'item),
+        ('item, int) => node('state, 'item, 'mutation),
       )
-    | DynamicSlot('state => component)
-  and staticNode('state, 'item) =
+  and staticNode('state, 'item, 'mutation) =
     | StaticTextNode(string)
     | StaticElement(
         string,
-        list(attribute('state)),
-        list(node('state, 'item)),
+        list(attribute('state, 'mutation)),
+        list(node('state, 'item, 'mutation)),
         bool,
       )
-    | StaticSlot(Dom.element => component);
+    | StaticSlot(component);
 
   open Webapi.Dom;
   open DynamicPart;
@@ -411,9 +336,10 @@ module Node = {
   let rec append =
           (
             root: Dom.element,
-            node: node('state, 'item),
+            node: node('state, 'item, 'mutation),
             container: Dom.element,
             isSvg: bool,
+            dispatch: 'mutation => unit,
             ~marker: option(Dom.comment),
             (),
           )
@@ -442,13 +368,13 @@ module Node = {
              );
 
         {
-          target: Some(text |> Text.asNode),
+          node: Some(text |> Text.asNode),
           dynamics: [
             DynamicTextNodePart({el: text |> Text.asNode, func, current: ""}),
           ],
         };
       | DynamicNodes(iterator, keyFn, childFn) => {
-          target: None,
+          node: None,
           dynamics: [
             DynamicNodesPart({
               el: container,
@@ -460,6 +386,7 @@ module Node = {
                   childFn(item, i),
                   container,
                   isSvg,
+                  dispatch,
                   ~marker=Some(ending),
                   (),
                 ),
@@ -468,10 +395,6 @@ module Node = {
               current: None,
             }),
           ],
-        }
-      | DynamicSlot(func) => {
-          target: None,
-          dynamics: [DynamicSlotPart({el: container, func, ending})],
         }
       }
     | StaticNode(node) =>
@@ -484,37 +407,36 @@ module Node = {
                ending,
              );
 
-        {target: Some(text |> Text.asNode), dynamics: []};
+        {node: Some(text |> Text.asNode), dynamics: []};
       | StaticElement(name, attrs, nodes, isSvg) =>
         let el =
           container
           |> Element.insertBefore(
-               HtmlOrSvg.createElement(name, isSvg),
+               ElementOperation.createElement(name, isSvg),
                ending,
              );
 
         let marker = createMarker();
         el |> Element.appendChild(marker);
 
-        let attrs = setAttribute(root, attrs, el, isSvg).dynamics;
+        let attrs = setAttribute(el, isSvg, attrs, dispatch).dynamics;
         let children =
           List.flatten(
             nodes
             |> List.map(node =>
-                 append(root, node, el, isSvg, ~marker=None, ()).dynamics
+                 append(root, node, el, isSvg, dispatch, ~marker=None, ()).
+                   dynamics
                ),
           );
 
         {
-          target: Some(el |> Element.asNode),
+          node: Some(el |> Element.asNode),
           dynamics: List.flatten([attrs, children]),
         };
-      | StaticSlot(func) =>
-        let component = func(container);
-
+      | StaticSlot(component) =>
         component((), container, isSvg, ~marker=Some(ending), ());
 
-        {target: None, dynamics: []};
+        {node: None, dynamics: []};
       }
     };
   };
@@ -523,68 +445,81 @@ module Node = {
 module Template = {
   open DynamicPart;
 
-  let define =
+  let create =
       (
-        nodes: list(Node.node('state, 'item)),
+        nodes: list(Node.node('state, 'item, 'mutation)),
         root: Dom.element,
         isSvg: bool,
+        defaultState: 'state,
+        action: ('state => unit, 'mutation, 'state) => unit,
         ~marker: option(Dom.comment),
         (),
       ) => {
-    let cache = TemplateCache.get(templateCache, root);
+    let dynamics = ref(None);
+    let currentState = ref(defaultState);
 
-    switch (cache) {
-    | Some(_) => ()
-    | None =>
-      TemplateCache.set(
-        templateCache,
-        root,
-        nodes
-        |> List.map(node => Node.append(root, node, root, isSvg, ~marker, ())),
-      )
+    let dispatch = mutation => {
+      action(
+        state => {
+          currentState := state;
+          switch (dynamics^) {
+          | Some(x) =>
+            dynamics :=
+              Some(
+                List.map(
+                  dynamic =>
+                    DynamicPart.updateDynamic(root, state, isSvg, dynamic),
+                  x,
+                ),
+              )
+          | None => ()
+          };
+        },
+        mutation,
+        currentState^,
+      );
     };
-  };
 
-  let update = (state: 'state, root: Dom.element, isSvg): unit => {
-    let cache = TemplateCache.get(templateCache, root);
+    let parts =
+      nodes
+      |> List.map(node => {
+           let parts =
+             Node.append(root, node, root, isSvg, dispatch, ~marker, ());
 
-    CurrentStateCache.set(currentStateCache, root, state);
+           parts.dynamics;
+         })
+      |> List.flatten;
 
-    switch (cache) {
-    | Some(template) =>
-      TemplateCache.set(
-        templateCache,
-        root,
-        template
-        |> List.map(parts => {
-             {
-               ...parts,
-               dynamics:
-                 parts.dynamics
-                 |> List.map(DynamicPart.updateDynamic(root, state, isSvg)),
-             }
-           }),
-      )
-    | None => ()
-    };
+    dynamics := Some(parts);
+
+    dispatch;
   };
 };
 
 let component =
     (
-      factory: ('state => unit) => list(Node.node('state, 'item)),
+      nodes: list(Node.node('state, 'item, 'mutation)),
       defaultState: 'state,
+      action: ('state => unit, 'mutation, 'state) => unit,
+      created: ('mutation => unit) => unit,
       (),
-      el: Dom.element,
+      container: Dom.element,
       isSvg: bool,
       ~marker: option(Dom.comment),
       (),
     ) => {
-  let dipatch = state => Template.update(state, el, isSvg);
+  let dispatch =
+    Template.create(
+      nodes,
+      container,
+      isSvg,
+      defaultState,
+      action,
+      ~marker,
+      (),
+    );
 
-  Template.define(factory(dipatch), el, isSvg, ~marker, ());
-
-  dipatch(defaultState);
+  created(dispatch);
 };
 
 let render = (component: component, el: Dom.element) =>
@@ -601,8 +536,7 @@ let text = content => StaticNode(StaticTextNode(content));
 let text_ = func => DynamicNode(DynamicTextNode(func));
 let nodes_ = (iterator, keyFn, childFn) =>
   DynamicNode(DynamicNodes(iterator, keyFn, childFn));
-let slot = func => StaticNode(StaticSlot(func));
-let slot_ = func => DynamicNode(DynamicSlot(func));
+let slot = component => StaticNode(StaticSlot(component));
 
 open Attribute;
 
@@ -610,13 +544,12 @@ let attr = (name, value) =>
   StaticAttribute(StaticStringAttribute(name, value));
 let attr_ = (name, func) =>
   DynamicAttribute(DynamicStringAttribute(name, func));
+
 let boolAttr = (name, value) =>
   StaticAttribute(StaticBooleanAttribute(name, value));
 let boolAttr_ = (name, func) =>
   DynamicAttribute(DynamicBooleanAttribute(name, func));
+
 let event = (name, handler) => StaticAttribute(StaticEvent(name, handler));
-let event_ = (name, func) => DynamicAttribute(DynamicEvent(name, func));
 let eventWithOptions = (name, handler, eventOption) =>
   StaticAttribute(StaticEventWithOptions(name, handler, eventOption));
-let eventWithOptions_ = (name, func, eventOption) =>
-  DynamicAttribute(DynamicEventWithOptions(name, func, eventOption));
