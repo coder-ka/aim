@@ -1,4 +1,4 @@
-type component =
+type componentType =
   (unit, Dom.element, bool, ~marker: option(Dom.comment), unit) => unit;
 
 type eventOption = {
@@ -326,7 +326,7 @@ module Node = {
         list(node('state, 'item, 'mutation)),
         bool,
       )
-    | StaticSlot(component);
+    | StaticSlot(componentType);
 
   open Webapi.Dom;
   open DynamicPart;
@@ -458,26 +458,24 @@ module Template = {
     let dynamics = ref(None);
     let currentState = ref(defaultState);
 
+    let update = state => {
+      currentState := state;
+      switch (dynamics^) {
+      | Some(x) =>
+        dynamics :=
+          Some(
+            List.map(
+              dynamic =>
+                DynamicPart.updateDynamic(root, state, isSvg, dynamic),
+              x,
+            ),
+          )
+      | None => ()
+      };
+    };
+
     let dispatch = mutation => {
-      action(
-        state => {
-          currentState := state;
-          switch (dynamics^) {
-          | Some(x) =>
-            dynamics :=
-              Some(
-                List.map(
-                  dynamic =>
-                    DynamicPart.updateDynamic(root, state, isSvg, dynamic),
-                  x,
-                ),
-              )
-          | None => ()
-          };
-        },
-        mutation,
-        currentState^,
-      );
+      action(update, mutation, currentState^);
     };
 
     let parts =
@@ -491,6 +489,8 @@ module Template = {
       |> List.flatten;
 
     dynamics := Some(parts);
+
+    update(defaultState);
 
     dispatch;
   };
@@ -522,7 +522,31 @@ let component =
   created(dispatch);
 };
 
-let render = (component: component, el: Dom.element) =>
+let statelessComponent =
+    (
+      nodes: list(Node.node('state, 'item, 'mutation)),
+      created: unit => unit,
+      (),
+      container: Dom.element,
+      isSvg: bool,
+      ~marker: option(Dom.comment),
+      (),
+    ) => {
+  let dispatch =
+    Template.create(
+      nodes,
+      container,
+      isSvg,
+      (),
+      (_, _, _) => (),
+      ~marker,
+      (),
+    );
+
+  created();
+};
+
+let render = (component: componentType, el: Dom.element) =>
   component((), el, false, ~marker=None, ());
 
 open Node;
