@@ -13,29 +13,20 @@ module Elements = {
 };
 
 module CountStore = {
-  type t = int;
+  module State = {
+    type state = int;
 
-  let current = ref(0);
-  let hooks = ref([]);
-  let observe = hook => {
-    hooks := [hook, ...hooks^];
+    let initialState = 0;
   };
 
-  type mutations =
-    | Increment(int);
+  include Aim.Store(State);
 
-  type status =
-    | Completed(int);
+  type actions =
+    | Increment;
 
-  let mutate = (mutation, callback) => {
-    switch (mutation) {
-    | Increment(count) =>
-      let count = count + 1;
-
-      callback(Completed(count));
-
-      current := count;
-      hooks^ |> List.iter(hook => hook(count));
+  let dispatch = action => {
+    switch (action) {
+    | Increment => commit(current^ + 1)
     };
   };
 };
@@ -44,21 +35,13 @@ module ChildComponent = {
   open Aim;
   open Elements;
 
-  type mutation =
-    | ApplyIncrement(int);
-
   let createElement = (~children, ()) => {
     component(
       <> <span> {text("hoge")} </span> </>,
       0,
-      (update, mutation, _) => {
-        switch (mutation) {
-        | ApplyIncrement(count) => update(count)
-        };
-        ();
-      },
-      dispatch => {
-        CountStore.observe(count => {dispatch(ApplyIncrement(count))});
+      (_, _, _) => {()},
+      update => {
+        CountStore.subscribe(update);
         ();
       },
     );
@@ -112,15 +95,13 @@ module Counter = {
       0,
       (update, mutation, count) => {
         switch (mutation) {
-        | Increment =>
-          CountStore.mutate(CountStore.Increment(count), status => {
-            switch (status) {
-            | CountStore.Completed(count) => update(count)
-            }
-          })
+        | Increment => CountStore.dispatch(CountStore.Increment)
         }
       },
-      dispatch => {()},
+      update => {
+        CountStore.subscribe(update);
+        ();
+      },
     );
   };
 };

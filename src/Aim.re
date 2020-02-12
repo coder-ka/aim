@@ -492,7 +492,7 @@ module Template = {
 
     update(defaultState);
 
-    dispatch;
+    update;
   };
 };
 
@@ -501,14 +501,14 @@ let component =
       nodes: list(Node.node('state, 'item, 'mutation)),
       defaultState: 'state,
       action: ('state => unit, 'mutation, 'state) => unit,
-      created: ('mutation => unit) => unit,
+      created: ('state => unit) => unit,
       (),
       container: Dom.element,
       isSvg: bool,
       ~marker: option(Dom.comment),
       (),
     ) => {
-  let dispatch =
+  let update =
     Template.create(
       nodes,
       container,
@@ -519,7 +519,7 @@ let component =
       (),
     );
 
-  created(dispatch);
+  created(update);
 };
 
 let statelessComponent =
@@ -532,7 +532,7 @@ let statelessComponent =
       ~marker: option(Dom.comment),
       (),
     ) => {
-  let dispatch =
+  let update =
     Template.create(
       nodes,
       container,
@@ -577,3 +577,22 @@ let boolAttr_ = (name, func) =>
 let event = (name, handler) => StaticAttribute(StaticEvent(name, handler));
 let eventWithOptions = (name, handler, eventOption) =>
   StaticAttribute(StaticEventWithOptions(name, handler, eventOption));
+
+// store
+module type State = {
+  type state;
+  let initialState: state;
+};
+
+module Store = (State: State) => {
+  let current = ref(State.initialState);
+  let hooks = ref([]);
+  let subscribe = hook => {
+    hooks := [hook, ...hooks^];
+  };
+
+  let commit = state => {
+    current := state;
+    hooks^ |> List.iter(hook => hook(state));
+  };
+};
