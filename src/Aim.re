@@ -140,29 +140,42 @@ module DynamicPart = {
                  });
 
             // remove unneccesary nodes
-            let firstItem =
-              Array.length(newList) > 0 ? Some(newList[0]) : None;
+            if (Array.length(newList) > 0) {
+              switch (newList[0]) {
+              | {parts} =>
+                switch (parts.node) {
+                | Some(node) =>
+                  let rec remove = pre => {
+                    switch (pre) {
+                    | Some(pre) =>
+                      if (pre !== (start |> Comment.asNode)) {
+                        parent |> Element.removeChild(pre);
+                        remove(node |> Webapi.Dom.Node.previousSibling);
+                      }
 
-            switch (firstItem) {
-            | Some({parts}) =>
-              switch (parts.node) {
-              | Some(node) =>
-                let rec remove = pre => {
-                  switch (pre) {
-                  | Some(pre) =>
-                    if (pre !== (start |> Comment.asNode)) {
-                      parent |> Element.removeChild(pre);
-                      remove(node |> Webapi.Dom.Node.previousSibling);
-                    }
-
-                  | None => ()
+                    | None => ()
+                    };
                   };
-                };
 
-                remove(node |> Webapi.Dom.Node.previousSibling);
-              | None => ()
-              }
-            | None => ()
+                  remove(node |> Webapi.Dom.Node.previousSibling);
+                | None => ()
+                }
+              };
+            } else {
+              // remove all item
+              let rec remove = pre => {
+                switch (pre) {
+                | Some(pre) =>
+                  if (pre !== (start |> Comment.asNode)) {
+                    parent |> Element.removeChild(pre);
+                    remove(ending |> Webapi.Dom.Comment.previousSibling);
+                  }
+
+                | None => ()
+                };
+              };
+
+              remove(ending |> Webapi.Dom.Comment.previousSibling);
             };
 
             newList;
@@ -228,19 +241,19 @@ module DynamicPart = {
 };
 
 module Attribute = {
-  type attribute('state, 'mutation) =
+  type attribute('state, 'action) =
     | DynamicAttribute(dynamicAttribute('state))
-    | StaticAttribute(staticAttribute('mutation))
+    | StaticAttribute(staticAttribute('action))
   and dynamicAttribute('state) =
     | DynamicStringAttribute(string, 'state => string)
     | DynamicBooleanAttribute(string, 'state => bool)
-  and staticAttribute('mutation) =
+  and staticAttribute('action) =
     | StaticStringAttribute(string, string)
     | StaticBooleanAttribute(string, bool)
-    | StaticEvent(string, (Dom.event, 'mutation => unit) => unit)
+    | StaticEvent(string, (Dom.event, 'action => unit) => unit)
     | StaticEventWithOptions(
         string,
-        (Dom.event, 'mutation => unit) => unit,
+        (Dom.event, 'action => unit) => unit,
         eventOption,
       );
 
@@ -250,8 +263,8 @@ module Attribute = {
       (
         el: Dom.element,
         isSvg: bool,
-        attributes: list(attribute('state, 'mutation)),
-        dispatch: 'mutation => unit,
+        attributes: list(attribute('state, 'action)),
+        dispatch: 'action => unit,
       )
       : dynamicParts('state, 'item) => {
     open Webapi.Dom;
@@ -308,22 +321,22 @@ module Attribute = {
 module Node = {
   open Attribute;
 
-  type node('state, 'item, 'mutation) =
-    | DynamicNode(dynamicNode('state, 'item, 'mutation))
-    | StaticNode(staticNode('state, 'item, 'mutation))
-  and dynamicNode('state, 'item, 'mutation) =
+  type node('state, 'item, 'action) =
+    | DynamicNode(dynamicNode('state, 'item, 'action))
+    | StaticNode(staticNode('state, 'item, 'action))
+  and dynamicNode('state, 'item, 'action) =
     | DynamicTextNode('state => string)
     | DynamicNodes(
         'state => array('item),
         ('item, int) => string,
-        ('item, int) => node('state, 'item, 'mutation),
+        ('item, int) => node('state, 'item, 'action),
       )
-  and staticNode('state, 'item, 'mutation) =
+  and staticNode('state, 'item, 'action) =
     | StaticTextNode(string)
     | StaticElement(
         string,
-        list(attribute('state, 'mutation)),
-        list(node('state, 'item, 'mutation)),
+        list(attribute('state, 'action)),
+        list(node('state, 'item, 'action)),
         bool,
       )
     | StaticSlot(componentType);
@@ -336,10 +349,10 @@ module Node = {
   let rec append =
           (
             root: Dom.element,
-            node: node('state, 'item, 'mutation),
+            node: node('state, 'item, 'action),
             container: Dom.element,
             isSvg: bool,
-            dispatch: 'mutation => unit,
+            dispatch: 'action => unit,
             ~marker: option(Dom.comment),
             (),
           )
@@ -447,19 +460,19 @@ module Template = {
 
   let create =
       (
-        nodes: list(Node.node('state, 'item, 'mutation)),
+        nodes: list(Node.node('state, 'item, 'action)),
         root: Dom.element,
         isSvg: bool,
-        defaultState: 'state,
-        action: ('state => unit, 'mutation, 'state) => unit,
+        initialize: ('state => unit) => unit,
+        actionHandler: ('action, 'state => unit, 'state) => unit,
         ~marker: option(Dom.comment),
         (),
       ) => {
     let dynamics = ref(None);
-    let currentState = ref(defaultState);
+    let currentState = ref(None);
 
     let update = state => {
-      currentState := state;
+      currentState := Some(state);
       switch (dynamics^) {
       | Some(x) =>
         dynamics :=
@@ -474,8 +487,11 @@ module Template = {
       };
     };
 
-    let dispatch = mutation => {
-      action(update, mutation, currentState^);
+    let dispatch = action => {
+      switch (currentState^) {
+      | Some(state) => actionHandler(action, update, state)
+      | None => ()
+      };
     };
 
     let parts =
@@ -490,60 +506,52 @@ module Template = {
 
     dynamics := Some(parts);
 
-    update(defaultState);
+    initialize(update);
 
-    update;
+    ();
   };
 };
 
 let component =
     (
-      nodes: list(Node.node('state, 'item, 'mutation)),
-      defaultState: 'state,
-      action: ('state => unit, 'mutation, 'state) => unit,
-      created: ('state => unit) => unit,
+      nodes: list(Node.node('state, 'item, 'action)),
+      initialize: ('state => unit) => unit,
+      actionHandler: ('action, 'state => unit, 'state) => unit,
       (),
       container: Dom.element,
       isSvg: bool,
       ~marker: option(Dom.comment),
       (),
     ) => {
-  let update =
-    Template.create(
-      nodes,
-      container,
-      isSvg,
-      defaultState,
-      action,
-      ~marker,
-      (),
-    );
-
-  created(update);
+  Template.create(
+    nodes,
+    container,
+    isSvg,
+    initialize,
+    actionHandler,
+    ~marker,
+    (),
+  );
 };
 
 let statelessComponent =
     (
-      nodes: list(Node.node('state, 'item, 'mutation)),
-      created: unit => unit,
+      nodes: list(Node.node('state, 'item, 'action)),
       (),
       container: Dom.element,
       isSvg: bool,
       ~marker: option(Dom.comment),
       (),
     ) => {
-  let update =
-    Template.create(
-      nodes,
-      container,
-      isSvg,
-      (),
-      (_, _, _) => (),
-      ~marker,
-      (),
-    );
-
-  created();
+  Template.create(
+    nodes,
+    container,
+    isSvg,
+    _ => (),
+    (_, _, _) => (),
+    ~marker,
+    (),
+  );
 };
 
 let render = (component: componentType, el: Dom.element) =>
@@ -581,11 +589,11 @@ let eventWithOptions = (name, handler, eventOption) =>
 // store
 module type State = {
   type state;
-  let initialState: state;
+  let init: unit => state;
 };
 
 module Store = (State: State) => {
-  let current = ref(State.initialState);
+  let current = ref(State.init());
   let hooks = ref([]);
   let subscribe = hook => {
     hooks := [hook, ...hooks^];

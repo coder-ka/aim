@@ -1,6 +1,6 @@
 {
   "name": "@coder-ka/aim",
-  "version": "0.2.2",
+  "version": "0.2.7",
   "description": "A Component library written in ReasonML",
   "main": "lib/js/src/aim.js",
   "repository": {

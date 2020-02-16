@@ -8,51 +8,16 @@ module Elements = {
   let button = (~id, ~onClick, ~children, ()) =>
     html("button", [attr("id", id), event("click", onClick)], children);
 
+  let checkbox = (~children, ~checked, ()) =>
+    html(
+      "input",
+      [attr("type", "checkbox"), attr_("checked", checked)],
+      children,
+    );
+
   let span = (~id="", ~children, ()) =>
     html("span", [attr("id", id)], children);
 };
-
-module CountStore = {
-  module State = {
-    type state = int;
-
-    let initialState = 0;
-  };
-
-  include Aim.Store(State);
-
-  type actions =
-    | Increment;
-
-  let dispatch = action => {
-    switch (action) {
-    | Increment => commit(current^ + 1)
-    };
-  };
-};
-
-module ChildComponent = {
-  open Aim;
-  open Elements;
-
-  let createElement = (~children, ()) => {
-    component(
-      <> <span> {text("hoge")} </span> </>,
-      0,
-      (_, _, _) => {()},
-      update => {
-        CountStore.subscribe(update);
-        ();
-      },
-    );
-  };
-};
-
-let generateArray = () => {
-  let arr = Array.make(100, 0) |> Array.map(_ => Js.Math.random_int(0, 999));
-  arr;
-};
-let sampled = generateArray();
 
 module Counter = {
   open Aim;
@@ -60,12 +25,10 @@ module Counter = {
 
   let increment = count => count + 1;
 
-  type mutations =
+  type actions =
     | Increment;
 
   let createElement = (~children, ()) => {
-    let children = children |> List.map(slot);
-
     component(
       <>
         <div>
@@ -73,34 +36,15 @@ module Counter = {
           <button id="inc" onClick={(_, dispatch) => dispatch(Increment)}>
             {text("+")}
           </button>
-          <div> ...children </div>
         </div>
-        {nodes_(
-           count => {
-             let filtered =
-               [|1, 2, 3, 4, 5|] |> Js.Array.filter(x => x > count);
-             filtered
-             |> Array.sort((cur, next) =>
-                  count mod 2 === 0 ? cur - next : next - cur
-                );
-             filtered;
-           },
-           (_, i) => Js.Int.toString(i),
-           (num, _) =>
-             <span id={Js.Int.toString(num)}>
-               {text_(count => Js.Int.toString((count + 1) * num))}
-             </span>,
-         )}
       </>,
-      0,
-      (update, mutation, count) => {
-        switch (mutation) {
-        | Increment => CountStore.dispatch(CountStore.Increment)
+      // init
+      update => update(0),
+      // action handler
+      (action, update, count) => {
+        switch (action) {
+        | Increment => update(count + 1)
         }
-      },
-      update => {
-        CountStore.subscribe(update);
-        ();
       },
     );
   };
@@ -130,7 +74,7 @@ describe("Expect", () => {
           raise(RootElement_NotFound);
         };
 
-      Aim.render(<Counter> <ChildComponent /> </Counter>, container);
+      Aim.render(<Counter />, container);
 
       // click +
       let incButton = container |> Element.querySelector("button#inc");
