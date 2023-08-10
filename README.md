@@ -42,6 +42,9 @@ module Counter = {
         // 初期化。update関数の引数に状態を渡すことで、Viewが更新されます。
         update => update(0),
         // click イベントなどで、dispatch関数が実行されると、呼ばれます。
+        // action: actions Variant
+        // update: update関数（初期化の時と同じ関数）
+        // count: コンポーネントの状態。初期化の際にupdate(0)としたため、数値型となっている。
         (action, update, count) => {
           switch (action) {
           | Increment => update(count + 1)
