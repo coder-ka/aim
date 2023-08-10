@@ -39,7 +39,7 @@ module Counter = {
             ],
           ),
         ],
-        // update関数の引数に状態を渡すことで、Viewが更新されます。
+        // 初期化。update関数の引数に状態を渡すことで、Viewが更新されます。
         update => update(0),
         (action, update, count) => {
           // click イベントなどで、dispatch関数が実行されると、呼ばれます
